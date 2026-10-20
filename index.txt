@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Pustaka HTML5 QR & Barcode Scanner -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" type="text/javascript"></script>
+  <style>
+    body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .card-custom { border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    #reader { width: 100%; max-width: 450px; margin: auto; min-height: 250px; background: #000; border-radius: 8px; overflow: hidden; }
+    #reader video { object-fit: cover !important; }
+  </style>
+</head>
+<body>
+  <div class="container py-4">
+    <h3 class="text-center text-primary fw-bold mb-3">KeMaAs - Kolej Komuniti Jelebu</h3>
+    
+    <!-- View 1: Auth (Login / Sign Up) -->
+    <div id="authView" class="row justify-content-center">
+      <div class="col-md-6">
+        <div class="card card-custom p-4">
+          <ul class="nav nav-pills nav-justified mb-3" id="pills-tab">
+            <li class="nav-item">
+              <button class="nav-link active" id="tabLoginBtn" onclick="switchAuthTab('login')">Log Masuk</button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-link" id="tabSignupBtn" onclick="switchAuthTab('signup')">Daftar Akaun</button>
+            </li>
+          </ul>
+
+          <!-- Form Login -->
+          <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="mb-3">
+              <label class="form-label">E-mel</label>
+              <input type="email" id="loginEmail" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Kata Laluan</label>
+              <input type="password" id="loginPass" class="form-control" required>
+            </div>
+            <button type="submit" id="loginSubmitBtn" class="btn btn-primary w-100">Log Masuk</button>
+          </form>
+
+          <!-- Form Sign Up -->
+          <form id="signupForm" class="d-none" onsubmit="handleSignUp(event)">
+            <div class="mb-2">
+              <label class="form-label">Peranan (Role)</label>
+              <select id="signRole" class="form-select" onchange="toggleStudentFields()" required>
+                <option value="Student">Pelajar</option>
+                <option value="Warden">Warden</option>
+                <option value="Security">Pengawal Keselamatan</option>
+              </select>
+            </div>
+            <div class="mb-2"><label class="form-label">Nama Penuh</label><input type="text" id="signName" class="form-control" required></div>
+            <div class="mb-2"><label class="form-label">No. IC (Barcode)</label><input type="text" id="signIC" class="form-control" placeholder="Cth: 080725102315" required></div>
+            
+            <div id="studentFields">
+              <div class="mb-2"><label class="form-label">No. Matrik</label><input type="text" id="signMatrix" class="form-control"></div>
+              <div class="mb-2"><label class="form-label">Nama Waris</label><input type="text" id="signGuardian" class="form-control"></div>
+              <div class="mb-2"><label class="form-label">No. Tel Waris</label><input type="text" id="signGuardianPhone" class="form-control"></div>
+            </div>
+
+            <div class="mb-2"><label class="form-label">No. Telefon</label><input type="text" id="signPhone" class="form-control" required></div>
+            <div class="mb-2"><label class="form-label">E-mel</label><input type="email" id="signEmail" class="form-control" required></div>
+            <div class="mb-3"><label class="form-label">Kata Laluan</label><input type="password" id="signPass" class="form-control" required></div>
+            <button type="submit" id="signupSubmitBtn" class="btn btn-success w-100">Daftar</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- View 2: Dashboard Utama -->
+    <div id="dashboardView" class="d-none">
+      <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-3 rounded card-custom">
+        <div>
+          <h5 id="userGreeting" class="m-0 fw-bold text-dark"></h5>
+          <span id="userBadge" class="badge bg-primary"></span>
+        </div>
+        <button class="btn btn-outline-danger btn-sm" onclick="logout()">Log Keluar</button>
+      </div>
+
+      <!-- ROLE 3: PENGAWAL KESELAMATAN -->
+      <div id="securitySection" class="d-none">
+        <div class="card card-custom p-3 text-center mb-3">
+          <h5 class="fw-bold mb-2">Pengimbas Barcode / QR Kad Matrik</h5>
+          <p class="text-muted small mb-2">Halakan kamera peranti ke barcode kad matrik pelajar</p>
+          
+          <div id="reader"></div>
+          
+          <div class="mt-3">
+            <button id="startScanBtn" class="btn btn-primary" onclick="startScanner()">Buka Kamera</button>
+            <button id="stopScanBtn" class="btn btn-secondary d-none" onclick="stopScanner()">Tutup Kamera</button>
+          </div>
+        </div>
+
+        <!-- Result Card / Modal -->
+        <div id="scanResultModal" class="card card-custom p-3 d-none border-primary">
+          <h5 class="fw-bold text-primary" id="scanTitle">Maklumat Imbasan</h5>
+          <hr class="my-2">
+          <div id="scanDetails"></div>
+          
+          <!-- Outing / Bermalam Actions -->
+          <div id="checkOutActions" class="d-none mt-3">
+            <div class="mb-3">
+              <label class="form-label fw-bold">Tujuan / Destinasi:</label>
+              <input type="text" id="destinationInput" class="form-control" placeholder="Cth: Pekan Jelebu / Bandar Seremban">
+            </div>
+            <div class="d-grid gap-2">
+              <button class="btn btn-warning fw-bold" onclick="processCheckOut('Outing')">Outing</button>
+              <button class="btn btn-danger fw-bold" onclick="processCheckOut('Pulang (Bermalam)')">Pulang (Bermalam)</button>
+            </div>
+          </div>
+
+          <!-- Check In Actions -->
+          <div id="checkInActions" class="d-none mt-3">
+            <button class="btn btn-success w-100 fw-bold py-2" onclick="processCheckIn()">Sahkan Masuk Pelajar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROLE 2 & 1: WARDEN / DEVELOPER -->
+      <div id="wardenSection" class="d-none">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h5 class="fw-bold">Rekod Keluar/Masuk Pelajar</h5>
+          <button class="btn btn-dark btn-sm" onclick="printPDF()">Eksport / Cetak PDF</button>
+        </div>
+        <div class="table-responsive bg-white rounded card-custom p-2">
+          <table class="table table-striped align-middle" id="logsTable">
+            <thead>
+              <tr>
+                <th>Pelajar</th>
+                <th>Jenis</th>
+                <th>Masa Keluar</th>
+                <th>Masa Masuk</th>
+                <th>Durasi</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="logsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ROLE 4: PELAJAR -->
+      <div id="studentSection" class="d-none">
+        <h5 class="fw-bold mb-3">Sejarah Keluar / Masuk Saya</h5>
+        <div class="table-responsive bg-white rounded card-custom p-2">
+          <table class="table table-striped align-middle">
+            <thead>
+              <tr>
+                <th>Jenis</th>
+                <th>Keluar</th>
+                <th>Masuk</th>
+                <th>Durasi</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="studentLogsBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ROLE 1: DEVELOPER -->
+      <div id="developerSection" class="d-none mt-4">
+        <h5 class="fw-bold text-danger">Pengurusan Pengguna (Developer)</h5>
+        <div class="table-responsive bg-white rounded card-custom p-2">
+          <table class="table table-bordered align-middle">
+            <thead>
+              <tr>
+                <th>Nama</th>
+                <th>IC / Matrik</th>
+                <th>E-mel</th>
+                <th>Role</th>
+                <th>Tindakan</th>
+              </tr>
+            </thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    let currentUser = null;
+    let html5QrcodeScanner = null;
+    let currentScannedData = null;
+
+    // --- LOGOUT SOLUTION: KEMBALI KE LOGIN PAGE DENGAN BERSIH ---
+    function logout() {
+      if (html5QrcodeScanner) {
+        stopScanner();
+      }
+      currentUser = null;
+      currentScannedData = null;
+
+      // Reset borang
+      document.getElementById('loginForm').reset();
+      document.getElementById('signupForm').reset();
+
+      // Sembunyikan semua seksyen Dashboard
+      document.getElementById('dashboardView').classList.add('d-none');
+      document.getElementById('securitySection').classList.add('d-none');
+      document.getElementById('wardenSection').classList.add('d-none');
+      document.getElementById('studentSection').classList.add('d-none');
+      document.getElementById('developerSection').classList.add('d-none');
+      document.getElementById('scanResultModal').classList.add('d-none');
+
+      // Tunjukkan semula halaman Log Masuk
+      document.getElementById('authView').classList.remove('d-none');
+      switchAuthTab('login');
+    }
+
+    function switchAuthTab(type) {
+      if(type === 'login') {
+        document.getElementById('loginForm').classList.remove('d-none');
+        document.getElementById('signupForm').classList.add('d-none');
+        document.getElementById('tabLoginBtn').classList.add('active');
+        document.getElementById('tabSignupBtn').classList.remove('active');
+      } else {
+        document.getElementById('loginForm').classList.add('d-none');
+        document.getElementById('signupForm').classList.remove('d-none');
+        document.getElementById('tabLoginBtn').classList.remove('active');
+        document.getElementById('tabSignupBtn').classList.add('active');
+      }
+    }
+
+    function toggleStudentFields() {
+      const role = document.getElementById('signRole').value;
+      if(role === 'Student') {
+        document.getElementById('studentFields').classList.remove('d-none');
+      } else {
+        document.getElementById('studentFields').classList.add('d-none');
+      }
+    }
+
+    function handleSignUp(e) {
+      e.preventDefault();
+      const btn = document.getElementById('signupSubmitBtn');
+      btn.disabled = true;
+      btn.innerText = "Sila tunggu...";
+
+      const data = {
+        role: document.getElementById('signRole').value,
+        fullName: document.getElementById('signName').value,
+        icNumber: document.getElementById('signIC').value.trim(),
+        matrixNo: document.getElementById('signMatrix').value.trim(),
+        guardianName: document.getElementById('signGuardian').value,
+        guardianPhone: document.getElementById('signGuardianPhone').value,
+        phoneNo: document.getElementById('signPhone').value,
+        email: document.getElementById('signEmail').value.trim(),
+        password: document.getElementById('signPass').value
+      };
+      
+      google.script.run.withSuccessHandler(res => {
+        btn.disabled = false;
+        btn.innerText = "Daftar";
+        alert(res.message);
+        if(res.success) switchAuthTab('login');
+      }).registerUser(data);
+    }
+
+    function handleLogin(e) {
+      e.preventDefault();
+      const btn = document.getElementById('loginSubmitBtn');
+      btn.disabled = true;
+      btn.innerText = "Memproses...";
+
+      const email = document.getElementById('loginEmail').value.trim();
+      const pass = document.getElementById('loginPass').value;
+      
+      google.script.run.withSuccessHandler(res => {
+        btn.disabled = false;
+        btn.innerText = "Log Masuk";
+        if(res.success) {
+          currentUser = res.user;
+          renderDashboard();
+        } else {
+          alert(res.message);
+        }
+      }).loginUser(email, pass);
+    }
+
+    function renderDashboard() {
+      document.getElementById('authView').classList.add('d-none');
+      document.getElementById('dashboardView').classList.remove('d-none');
+      document.getElementById('userGreeting').innerText = currentUser.fullName;
+      document.getElementById('userBadge').innerText = currentUser.role;
+
+      if (currentUser.role === 'Security') {
+        document.getElementById('securitySection').classList.remove('d-none');
+      } else if (currentUser.role === 'Warden') {
+        document.getElementById('wardenSection').classList.remove('d-none');
+        loadLogs();
+      } else if (currentUser.role === 'Student') {
+        document.getElementById('studentSection').classList.remove('d-none');
+        loadStudentLogs();
+      } else if (currentUser.role === 'Developer') {
+        document.getElementById('wardenSection').classList.remove('d-none');
+        document.getElementById('developerSection').classList.remove('d-none');
+        loadLogs();
+        loadUsers();
+      }
+    }
+
+    // --- CAMERA & BARCODE SCANNER SOLUTION ---
+    function startScanner() {
+      document.getElementById('scanResultModal').classList.add('d-none');
+
+      // Konfigurasi imbasan yang menyokong Barcode 1D (Code 128 / EAN) & QR
+      const config = {
+        fps: 15,
+        qrbox: { width: 300, height: 150 }, // Bentuk melintang sesuai untuk barcode kad
+        aspectRatio: 1.0,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
+      };
+
+      if (!html5QrcodeScanner) {
+        html5QrcodeScanner = new Html5Qrcode("reader");
+      }
+
+      // Utamakan kamera belakang peranti (facingMode: environment)
+      html5QrcodeScanner.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText) => {
+          // Berjaya Imbas!
+          stopScanner();
+          onBarcodeScanned(decodedText);
+        },
+        (errorMessage) => {
+          // Abaikan ralat semasa mencari barcode
+        }
+      ).then(() => {
+        document.getElementById('startScanBtn').classList.add('d-none');
+        document.getElementById('stopScanBtn').classList.remove('d-none');
+      }).catch(err => {
+        alert("Gagal mengakses kamera peranti. Pastikan anda memberikan kebenaran (Permission) akses kamera pada pelayar anda.\n\nRalat: " + err);
+      });
+    }
+
+    function stopScanner() {
+      if (html5QrcodeScanner && html5QrcodeScanner.isScanning) {
+        html5QrcodeScanner.stop().then(() => {
+          document.getElementById('startScanBtn').classList.remove('d-none');
+          document.getElementById('stopScanBtn').classList.add('d-none');
+        }).catch(err => console.error(err));
+      }
+    }
+
+    function onBarcodeScanned(icNumber) {
+      // Bersihkan teks daripada sebarang ruang
+      icNumber = icNumber.trim();
+
+      google.script.run.withSuccessHandler(res => {
+        if(!res.success) {
+          alert(res.message);
+          return;
+        }
+        currentScannedData = res;
+        document.getElementById('scanResultModal').classList.remove('d-none');
+        
+        let html = `<p class="mb-1"><strong>Nama:</strong> ${res.student.fullName}</p>
+                    <p class="mb-1"><strong>No. Matrik:</strong> ${res.student.matrixNo}</p>
+                    <p class="mb-1"><strong>No. IC:</strong> ${res.student.icNumber}</p>`;
+        
+        if(res.action === 'CHECK_OUT') {
+          document.getElementById('scanTitle').innerText = "Proses KELUAR Pelajar";
+          document.getElementById('checkOutActions').classList.remove('d-none');
+          document.getElementById('checkInActions').classList.add('d-none');
+        } else {
+          document.getElementById('scanTitle').innerText = "Proses MASUK Pelajar";
+          html += `<p class="mb-1 text-danger"><strong>Tempoh Di Luar:</strong> ${res.duration}</p>
+                   <p class="mb-1"><strong>Tujuan:</strong> ${res.activeLog.destination}</p>`;
+          document.getElementById('checkInActions').classList.remove('d-none');
+          document.getElementById('checkOutActions').classList.add('d-none');
+        }
+        document.getElementById('scanDetails').innerHTML = html;
+      }).scanStudentBarcode(icNumber);
+    }
+
+    function processCheckOut(type) {
+      const dest = document.getElementById('destinationInput').value.trim();
+      if(!dest) {
+        alert("Sila masukkan tujuan/destinasi pelajar terlebih dahulu.");
+        return;
+      }
+
+      const payload = {
+        icNumber: currentScannedData.student.icNumber,
+        studentName: currentScannedData.student.fullName,
+        matrixNo: currentScannedData.student.matrixNo,
+        type: type,
+        destination: dest,
+        securityId: currentUser.userId
+      };
+
+      google.script.run.withSuccessHandler(res => {
+        alert(res.message);
+        document.getElementById('scanResultModal').classList.add('d-none');
+        document.getElementById('destinationInput').value = '';
+      }).confirmCheckOut(payload);
+    }
+
+    function processCheckIn() {
+      const payload = {
+        logId: currentScannedData.activeLog.logId,
+        duration: currentScannedData.duration,
+        securityId: currentUser.userId
+      };
+
+      google.script.run.withSuccessHandler(res => {
+        alert(res.message);
+        document.getElementById('scanResultModal').classList.add('d-none');
+      }).confirmCheckIn(payload);
+    }
+
+    function loadLogs() {
+      google.script.run.withSuccessHandler(data => {
+        let rows = '';
+        if(data.length === 0) {
+          rows = `<tr><td colspan="6" class="text-center text-muted">Tiada rekod keluar/masuk.</td></tr>`;
+        } else {
+          data.forEach(l => {
+            rows += `<tr>
+              <td><strong>${l.studentName}</strong><br><small class="text-muted">${l.matrixNo}</small></td>
+              <td>${l.type}</td>
+              <td>${l.timeOut}</td>
+              <td>${l.timeIn}</td>
+              <td>${l.duration}</td>
+              <td><span class="badge ${l.status==='Outside'?'bg-warning text-dark':'bg-success'}">${l.status}</span></td>
+            </tr>`;
+          });
+        }
+        document.getElementById('logsBody').innerHTML = rows;
+      }).getAllLogs();
+    }
+
+    function loadStudentLogs() {
+      google.script.run.withSuccessHandler(data => {
+        let rows = '';
+        if(data.length === 0) {
+          rows = `<tr><td colspan="5" class="text-center text-muted">Tiada rekod sejarah pergerakan.</td></tr>`;
+        } else {
+          data.forEach(l => {
+            rows += `<tr>
+              <td>${l.type}</td>
+              <td>${l.timeOut}</td>
+              <td>${l.timeIn}</td>
+              <td>${l.duration}</td>
+              <td><span class="badge ${l.status==='Outside'?'bg-warning text-dark':'bg-success'}">${l.status}</span></td>
+            </tr>`;
+          });
+        }
+        document.getElementById('studentLogsBody').innerHTML = rows;
+      }).getStudentLogs(currentUser.icNumber);
+    }
+
+    function loadUsers() {
+      google.script.run.withSuccessHandler(users => {
+        let rows = '';
+        users.forEach(u => {
+          rows += `<tr>
+            <td>${u.fullName}</td>
+            <td>${u.icNumber} / ${u.matrixNo || '-'}</td>
+            <td>${u.email}</td>
+            <td><span class="badge bg-info text-dark">${u.role}</span></td>
+            <td>
+              <button class="btn btn-danger btn-sm" onclick="deleteUserAction('${u.userId}')">Padam</button>
+            </td>
+          </tr>`;
+        });
+        document.getElementById('usersBody').innerHTML = rows;
+      }).getAllUsers();
+    }
+
+    function deleteUserAction(userId) {
+      if(confirm("Adakah anda pasti mahu memadam akaun pengguna ini?")) {
+        google.script.run.withSuccessHandler(res => {
+          alert(res.message);
+          loadUsers();
+        }).deleteUser(userId);
+      }
+    }
+
+    function printPDF() {
+      window.print();
+    }
+  </script>
+</body>
+</html>
